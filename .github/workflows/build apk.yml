@@ -35,7 +35,8 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Kotlin-APK
-          path: "**/build/outputs/apk/debug/*.apk"
-          if-no-files-found: error
-          retention-days: 7
+                - name: Inspect project
+        run: |
+          pwd
+          ls -la
+          find . -maxdepth 4 \( -name gradlew -o -name settings.gradle -o -name settings.gradle.kts -o -name build.gradle -o -name build.gradle.kts \) -print

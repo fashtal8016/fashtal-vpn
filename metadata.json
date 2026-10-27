@@ -1,0 +1,6 @@
+{
+  "name": "Fashtal VPN",
+  "description": "Fast, unlimited, and ad-free VPN with ultra-fast servers in the United States and Germany.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,42 +1,103 @@
 
-name: Build Kotlin APK
+name: Build Android APK
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   build:
+    name: Build APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Get project
+      - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Show project files
+        run: |
+          echo "Project root:"
+          ls -la
+          echo "Gradle files:"
+          find . -maxdepth 5 -type f \( \
+            -name gradlew -o \
+            -name settings.gradle -o \
+            -name settings.gradle.kts -o \
+            -name build.gradle -o \
+            -name build.gradle.kts \
+          \) -not -path './.git/*' -print
+
+      - name: Find Gradle wrapper
+        id: gradle
+        shell: bash
+        run: |
+          WRAPPER="$(find . -maxdepth 5 -type f -name gradlew \
+            -not -path './.git/*' -print -quit)"
+
+          if [ -z "$WRAPPER" ]; then
+            echo "::error::gradlew not found. This repository may not contain a Gradle Android project."
+            exit 1
+          fi
+
+          ROOT="$(dirname "$WRAPPER")"
+          echo "root=$ROOT" >> "$GITHUB_OUTPUT"
+          chmod +x "$WRAPPER"
+
+      - name: Detect Java version
+        id: java
+        shell: bash
+        run: |
+          ROOT="${{ steps.gradle.outputs.root }}"
+          FILES="$(find "$ROOT" -maxdepth 3 -type f \
+            \( -name '*.gradle' -o -name '*.gradle.kts' -o -name 'gradle.properties' \) \
+            -print)"
+
+          if grep -Eiq 'JavaLanguageVersion\.of\(21\)|jvmToolchain\(21\)|VERSION_21|JVM_21|jvmTarget\s*=\s*["'\'']21|jvmTarget\s*=\s*["'\'']21' <<< "$FILES" 2>/dev/null; then
+            echo "version=21" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=17" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: ${{ steps.java.outputs.version }}
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@v4
 
-      - name: Build Debug APK
+      - name: Build debug APK
+        working-directory: ${{ steps.gradle.outputs.root }}
+        shell: bash
         run: |
-          chmod +x ./gradlew
-          ./gradlew assembleDebug
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Find APK files
+        id: apk
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/apk"
+          find "${{ steps.gradle.outputs.root }}" -type f \
+            -path '*/build/outputs/apk/*/*.apk' \
+            -exec cp {} "$RUNNER_TEMP/apk/" \;
+
+          if [ -z "$(ls -A "$RUNNER_TEMP/apk")" ]; then
+            echo "::error::Build finished but no APK was found."
+            exit 1
+          fi
+
+          ls -lh "$RUNNER_TEMP/apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-                - name: Inspect project
-        run: |
-          pwd
-          ls -la
-          find . -maxdepth 4 \( -name gradlew -o -name settings.gradle -o -name settings.gradle.kts -o -name build.gradle -o -name build.gradle.kts \) -print
+          name: Android-APK
+          path: ${{ runner.temp }}/apk/*.apk
+          if-no-files-found: error
+          retention-days: 7
